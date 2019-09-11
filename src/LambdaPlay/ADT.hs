@@ -31,7 +31,7 @@ reduce :: Reduction -> Reduction
 reduce apply = reduceTerm
   where
     reduceTerm :: Reduction
-    reduceTerm s = apply s <|> reduceClosed s <|> resolveV s <|> reduceFn s <|> reduceArg s
+    reduceTerm s = reduceClosed s <|> resolveV s <|> reduceFn s <|> reduceArg s <|> apply s
     reduceClosed :: Reduction
     reduceClosed (_, Closed _ c@(Closed _ _)) = Just c
     reduceClosed (env, Closed closedEnv f@(_ :. _) :| arg) =
@@ -76,12 +76,16 @@ reduceAll apply env e = reverse $ go [e] e
 reduceEnd :: Reduction -> Env -> Lambda -> Lambda
 reduceEnd apply env = last . reduceAll apply env
 
+eval :: Reduction -> Lambda -> Lambda
+eval apply = reduceEnd apply []
+
 reduceCount :: Reduction -> Env -> Lambda -> (Int, Lambda)
 reduceCount apply env expr = let reds = reduceAll apply env expr
                              in (length reds, last reds)
 
 -- Tests
 
+identity = X :. Var X
 lTrue = X :. Y :. Var X
 lFalse = X :. Y :. Var Y
 lNot = Z :. Var Z :| lFalse :| lTrue
