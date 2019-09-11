@@ -31,7 +31,8 @@ reduce :: Reduction -> Reduction
 reduce apply = reduceTerm
   where
     reduceTerm :: Reduction
-    reduceTerm s = reduceClosed s <|> resolveV s <|> reduceFn s <|> reduceArg s <|> apply s
+    reduceTerm s =
+      apply s <|> reduceClosed s <|> reduceFn s <|> reduceArg s <|> resolveV s
     reduceClosed :: Reduction
     reduceClosed (_, Closed _ c@(Closed _ _)) = Just c
     reduceClosed (env, Closed closedEnv f@(_ :. _) :| arg) =
@@ -56,9 +57,9 @@ applyByValue :: Reduction
 applyByValue (env, (argName :. body) :| arg) =
   case arg of
     f@(_ :. _)            -> Just $ Closed (setSym argName (Closed env f) env) body
-    f@(Closed _ (_ :. _)) -> Just $ Closed (setSym argName (Closed env f) env) body
+    f@(Closed _ (_ :. _)) -> Just $ Closed (setSym argName f env) body
     v@(Var _)             -> Just $ Closed (setSym argName (Closed env v) env) body
-    v@(Closed _ (Var _))  -> Just $ Closed (setSym argName (Closed env v) env) body
+    v@(Closed _ (Var _))  -> Just $ Closed (setSym argName v env) body
     _ -> Nothing
 applyByValue _ = Nothing
 
