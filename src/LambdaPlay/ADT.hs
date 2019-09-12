@@ -20,6 +20,8 @@ data Lambda = Var Symbol
             | Lambda :| Lambda
             | Symbol :. Lambda
             | Closed Env Lambda
+            | Zero
+            | Succ Lambda
   deriving (Eq, Show)
 
 infixl 7 :|
@@ -32,17 +34,28 @@ reduce apply = reduceTerm
   where
     reduceTerm :: Reduction
     reduceTerm s =
-      apply s <|> reduceClosed s <|> reduceFn s <|> reduceArg s <|> resolveV s
+      apply s
+      <|> reduceClosed s
+      <|> reduceFn s
+      <|> reduceArg s
+      <|> resolveV s
+      <|> reduceSucc s
     reduceClosed :: Reduction
     reduceClosed (_, Closed _ c@(Closed _ _)) = Just c
     reduceClosed (env, Closed closedEnv f@(_ :. _) :| arg) =
       Just $ Closed closedEnv (f :| Closed env arg)
+    reduceClosed (_, Closed _ Zero) = Just Zero
+    reduceClosed (_, Closed env (Succ t)) =
+      Just $ Succ (Closed env t)
     reduceClosed (_, Closed env v@(Var sym)) =
       case resolveSym sym env of
         Nothing  -> Just v
         Just val -> Just val
     reduceClosed (_, Closed env t) = Closed env <$> reduceTerm (env, t)
     reduceClosed _ = Nothing
+    reduceSucc :: Reduction
+    reduceSucc (env, Succ n) = Succ <$> reduceTerm (env, n)
+    reduceSucc _ = Nothing
     resolveV :: Reduction
     resolveV (env, Var sym) = resolveSym sym env
     resolveV _ = Nothing
@@ -53,14 +66,21 @@ reduce apply = reduceTerm
     reduceArg (env, f :| arg) = fmap (f :|) (reduceTerm (env, arg))
     reduceArg _ = Nothing
 
+isNormal :: Lambda -> Bool
+isNormal f@(_ :. _) = True
+isNormal v@(Var _)  = True
+isNormal Zero       = True
+isNormal (Succ t)   = isNormal t
+isNormal _          = False
+
+closedValueIs :: (Lambda -> Bool) -> Lambda -> Bool
+closedValueIs pred (Closed _ t) = pred t
+closedValueIs _ _ = False
+
 applyByValue :: Reduction
-applyByValue (env, (argName :. body) :| arg) =
-  case arg of
-    f@(_ :. _)            -> Just $ Closed (setSym argName (Closed env f) env) body
-    f@(Closed _ (_ :. _)) -> Just $ Closed (setSym argName f env) body
-    v@(Var _)             -> Just $ Closed (setSym argName (Closed env v) env) body
-    v@(Closed _ (Var _))  -> Just $ Closed (setSym argName v env) body
-    _ -> Nothing
+applyByValue (env, (argName :. body) :| arg)
+  | isNormal arg = Just $ Closed (setSym argName (Closed env arg) env) body
+  | closedValueIs isNormal arg = Just $ Closed (setSym argName arg env) body
 applyByValue _ = Nothing
 
 applyByName :: Reduction
@@ -93,15 +113,20 @@ lNot = Z :. Var Z :| lFalse :| lTrue
 lOr = A :. B :. X :. Y :. Var A :| Var X :| (Var B :| Var X :| Var Y)
 lAnd = A :. B :. X :. Y :. Var A :| (Var B :| Var X :| Var Y) :| Var Y
 pair = X :. Y :. Z :. Var Z :| Var X :| Var Y
-one = F :. Var F
+zero = F :. A :. Var A
+one = F :. A :. Var F :| Var A
 inc = N :. F :. X :. Var F :| (Var N :| Var F :| Var X)
 two = inc :| one
 three = inc :| two
 plus = N :. M :. Var N :| inc :| Var M
+times = N :. M :. Var N :| (plus :| Var M) :| zero
+power = N :. M :. Var N :| (times :| Var M) :| one
 nil = F :. Z :. Var Z
 cons = X :. L :. F :. Z :. Var F :| Var X :| (Var L :| Var F :| Var Z)
 lAny = L :. Var L :| lOr :| lFalse
 lAll = L :. Var L :| lAnd :| lTrue
+applySucc = X :. Succ (Var X)
+toSuccZero = N :. Var N :| applySucc :| Zero
 
 ttt = cons :| lTrue  :| (cons :| lTrue  :| (cons :| lTrue  :| nil))
 tft = cons :| lTrue  :| (cons :| lFalse :| (cons :| lTrue  :| nil))
