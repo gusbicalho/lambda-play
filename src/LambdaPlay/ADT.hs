@@ -84,6 +84,8 @@ applyByValue (env, (argName :. body) :| arg)
 applyByValue _ = Nothing
 
 applyByName :: Reduction
+applyByName (env, (argName :. body) :| arg@(Closed _ _)) =
+  Just $ Closed (setSym argName arg env) body
 applyByName (env, (argName :. body) :| arg) =
   Just $ Closed (setSym argName (Closed env arg) env) body
 applyByName _ = Nothing
@@ -141,10 +143,37 @@ testCases = [ (lAny :| ttt :| Var A :| Var B, Var A)
             , (lAll :| tft :| Var A :| Var B, Var B)
             , (lAll :| ftf :| Var A :| Var B, Var B)
             , (lAll :| fff :| Var A :| Var B, Var B)
+            , (toSuccZero :| zero, Zero)
+            , (toSuccZero :| one, Succ Zero)
+            , (toSuccZero :| two, Succ (Succ Zero))
+            , (toSuccZero :| (inc :| zero), Succ                 Zero)
+            , (toSuccZero :| (inc :|  one), Succ . Succ        $ Zero)
+            , (toSuccZero :| (inc :|  two), Succ . Succ . Succ $ Zero)
+            , (toSuccZero :| (plus :| zero :|  zero),                                    Zero)
+            , (toSuccZero :| (plus :| zero :|   one),                             Succ $ Zero)
+            , (toSuccZero :| (plus :|  one :|  zero),                             Succ $ Zero)
+            , (toSuccZero :| (plus :|  one :|   one),                      Succ . Succ $ Zero)
+            , (toSuccZero :| (plus :|  two :|  zero),                      Succ . Succ $ Zero)
+            , (toSuccZero :| (plus :| zero :|   two),                      Succ . Succ $ Zero)
+            , (toSuccZero :| (plus :| two  :| three), Succ . Succ . Succ . Succ . Succ $ Zero)
+            , (toSuccZero :| (times :| zero :|  zero),                                           Zero)
+            , (toSuccZero :| (times :| zero :|   one),                                           Zero)
+            , (toSuccZero :| (times :| zero :|   two),                                           Zero)
+            , (toSuccZero :| (times :|  one :|  zero),                                           Zero)
+            , (toSuccZero :| (times :|  two :|  zero),                                           Zero)
+            , (toSuccZero :| (times :|  one :|   one),                                    Succ $ Zero)
+            , (toSuccZero :| (times :|  one :|   two),                             Succ . Succ $ Zero)
+            , (toSuccZero :| (times :|  two :|   one),                             Succ . Succ $ Zero)
+            , (toSuccZero :| (times :|  two :| three), Succ . Succ . Succ . Succ . Succ . Succ $ Zero)
+            , (toSuccZero :| (cons :| one :| (cons :| two :| (cons :| three :| nil)) :| plus :| zero)
+              ,Succ . Succ . Succ . Succ . Succ . Succ $ Zero)
+            , (toSuccZero :| (cons :| one :| (cons :| two :| (cons :| three :| nil)) :| times :| one)
+              ,Succ . Succ . Succ . Succ . Succ . Succ $ Zero)
             ]
 
-tests apply = map testOne testCases
-  where testOne (expr, expected)
-          | expected == actual = Right ()
-          | otherwise = Left (expr, expected, actual)
-          where actual = reduceEnd apply [] expr
+tests apply = map (testOne apply) testCases
+
+testOne apply (expr, expected)
+  | expected == actual = Right ()
+  | otherwise = Left (expr, expected, actual)
+  where actual = reduceEnd apply [] expr
