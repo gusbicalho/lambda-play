@@ -48,17 +48,32 @@ strs :: [String]
 strs = prefixes ++ (strs >>= \s -> map (s ++) prefixes)
   where prefixes = map (:[]) "abcd"
 
+newName :: NamingContext -> String
+newName (NC bindings) = head . filter unbound $ strs
+  where unbound s = all (s /=) bindings
+
 resolveNum :: NamingContext -> Int -> (NamingContext, String)
 resolveNum nc@(NC bindings) i = case nth i bindings of
     Just s -> (nc, s)
-    Nothing -> (NC $ bindings ++ [newName], newName)
+    Nothing -> (NC $ bindings ++ [newName'], newName')
   where
-    newName = head . filter unbound $ strs
-    unbound s = all (s /=) bindings
+    newName' = newName nc
 
--- restoreNames' :: NamingContext -> Lambda -> (NamingContext, NamedLambda)
--- restoreNames' nameCtx = \case
---   V i
+pushNewName :: NamingContext -> (NamingContext, String)
+pushNewName nc@(NC bindings) = (NC $ name : bindings, name)
+  where name = newName nc
+
+restoreNames' :: NamingContext -> Lambda -> (NamingContext, NamedLambda)
+restoreNames' nameCtx = \case
+  V i     -> Var <$> resolveNum nameCtx i
+  App l m -> let (nameCtx',  l') = restoreNames' nameCtx l
+                 (nameCtx'', m') = restoreNames' nameCtx' m
+             in (nameCtx'', l' :| m')
+  Abs l   -> let (nameCtx', name) = pushNewName nameCtx
+                 (_, body) = restoreNames' nameCtx' l
+             in (nameCtx, name :. body)
+
+restoreNames = snd . restoreNames' (NC [])
 
 -- Examples
 
@@ -67,3 +82,6 @@ identity = "X" :. Var "X"
 lTrue = "X" :. "Y" :. Var "X"
 lFalse = "X" :. "Y" :. Var "Y"
 lNot = "Z" :. Var "Z" :| lFalse :| lTrue
+
+roundTrip :: Lambda -> Bool
+roundTrip l = l == removeNames (restoreNames l)
